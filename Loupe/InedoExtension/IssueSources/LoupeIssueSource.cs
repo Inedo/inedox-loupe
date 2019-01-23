@@ -8,7 +8,9 @@ using Inedo.Extensibility.Credentials;
 using Inedo.Extensibility.IssueSources;
 using Inedo.Extensions.Loupe.Client;
 using Inedo.Extensions.Loupe.Credentials;
+using Inedo.Extensions.Loupe.SuggestionProviders;
 using Inedo.Serialization;
+using Inedo.Web;
 
 namespace Inedo.Extensions.Loupe.IssueSources
 {
@@ -19,20 +21,23 @@ namespace Inedo.Extensions.Loupe.IssueSources
         [Persistent]
         [DisplayName("Credentials")]
         public string CredentialName { get; set; }
-#warning FIX use suggestion provider
+
         [Persistent]
         [DisplayName("Tenant")]
         [PlaceholderText("Use tentant from credentials")]
+        [SuggestableValue(typeof(TenantNameSuggestionProvider))]
         public string Tenant { get; set; }
-#warning FIX use suggestion provider
+
         [Persistent]
         [Required]
         [DisplayName("Product")]
+        [SuggestableValue(typeof(ProductNameSuggestionProvider))]
         public string Product { get; set; }
-#warning FIX use suggestion provider
+
         [Persistent]
         [Required]
         [DisplayName("Application")]
+        [SuggestableValue(typeof(ApplicationNameSuggestionProvider))]
         public string Application { get; set; }
 
         [Persistent]

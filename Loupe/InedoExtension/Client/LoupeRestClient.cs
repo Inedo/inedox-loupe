@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -21,12 +20,26 @@ namespace Inedo.Extensions.Loupe.Client
         private readonly SecureString password;
         private readonly ILogSink log;
 
-        public LoupeRestClient(string baseUrl, string userName, SecureString password, ILogSink log)
+        public LoupeRestClient(string baseUrl, string userName, SecureString password, ILogSink log = null)
         {
             this.baseUrl = AH.CoalesceString(baseUrl, DefaultBaseUrl).TrimEnd('/');
             this.userName = userName ?? throw new ArgumentNullException(nameof(userName));
             this.password = password ?? throw new ArgumentNullException(nameof(password));
-            this.log = log ?? throw new ArgumentNullException(nameof(log));
+            this.log = log ?? new NullLogSink();
+        }
+
+        public async Task<TenantsForUserResponse> GetTenantsAsync()
+        {
+            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var result = await this.InvokeAsync<TenantsForUserResponse>(
+                token,
+                "GET",
+                "Tenant/ForUser",
+                LoupeApiOptions.Default
+            ).ConfigureAwait(false);
+
+            return result;
         }
 
         public async Task<ProductsAndApplicationsResponse> GetApplicationsAsync(string tenant)
@@ -197,7 +210,7 @@ namespace Inedo.Extensions.Loupe.Client
         private string BuildApiUrl(string relativeUrl, LoupeApiOptions arguments)
         {
             string apiBaseUrl;
-            if (arguments.Tenant != null)
+            if (!string.IsNullOrWhiteSpace(arguments.Tenant))
                 apiBaseUrl = $"{this.baseUrl}/Customers/{Uri.EscapeUriString(arguments.Tenant)}/api/";
             else
                 apiBaseUrl = $"{this.baseUrl}/api/";
@@ -242,6 +255,11 @@ namespace Inedo.Extensions.Loupe.Client
                 var js = JsonSerializer.CreateDefault();
                 return js.Deserialize<T>(jsonReader);
             }
+        }
+
+        private sealed class NullLogSink : ILogSink
+        {
+            public void Log(IMessage message) { }
         }
     }
 
