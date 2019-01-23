@@ -73,6 +73,7 @@
     <Compile Include="Client\LoupeRestClient.cs" />
     <Compile Include="Client\Model\ApplicationVersionResponse.cs" />
     <Compile Include="Client\Model\AuthenticationToken.cs" />
+    <Compile Include="Client\Model\Error.cs" />
     <Compile Include="Client\Model\IssuesForApplicationsResponse.cs" />
     <Compile Include="Client\Model\ProductsAndApplicationsResponse.cs" />
     <Compile Include="Credentials\LoupeCredentials.cs" />

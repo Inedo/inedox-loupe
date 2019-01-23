@@ -83,33 +83,53 @@ namespace Inedo.Extensions.Loupe.Client
                  }
              ).ConfigureAwait(false);
 
+            this.log.LogDebug($"Searching for version {version}...");
+
             var versionData = versions.data.FirstOrDefault(v => string.Equals(v.version.title, version, StringComparison.OrdinalIgnoreCase));
             if (versionData == null)
-                throw new ArgumentException($"version '{version}' not found in Loupe.");
+                throw new LoupeRestException(404, $"version '{version}' not found in Loupe.", null);
 
-            var openIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
-                token,
-                "GET",
-                "Issues/OpenForApplications",
-                new LoupeApiOptions
-                {
-                    Tenant = tenant,
-                    IncludeQueryString = true,
-                    ApplicationVersionId = versionData.id
-                }
-            ).ConfigureAwait(false);
+            IssuesForApplicationsResponse openIssues;
+            try
+            {
+                openIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
+                    token,
+                    "GET",
+                    "Issues/OpenForApplication",
+                    new LoupeApiOptions
+                    {
+                        Tenant = tenant,
+                        IncludeQueryString = true,
+                        ApplicationVersionId = versionData.id
+                    }
+                ).ConfigureAwait(false);
+            }
+            catch (LoupeRestException ex) when (ex.StatusCode == 404)
+            {
+                // a 404 on this endpoint means there are no issues, simulate that response
+                openIssues = new IssuesForApplicationsResponse { data = new Issue[0] };
+            }
 
-            var closedIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
-                token,
-                "GET",
-                "Issues/ClosedForApplications",
-                new LoupeApiOptions
-                {
-                    Tenant = tenant,
-                    IncludeQueryString = true,
-                    ApplicationVersionId = versionData.id
-                }
-            ).ConfigureAwait(false);
+            IssuesForApplicationsResponse closedIssues;
+            try
+            { 
+                closedIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
+                    token,
+                    "GET",
+                    "Issues/ClosedForApplication",
+                    new LoupeApiOptions
+                    {
+                        Tenant = tenant,
+                        IncludeQueryString = true,
+                        ApplicationVersionId = versionData.id
+                    }
+                ).ConfigureAwait(false);
+            }
+            catch (LoupeRestException ex) when (ex.StatusCode == 404)
+            {
+                // a 404 on this endpoint means there are no issues, simulate that response
+                closedIssues = new IssuesForApplicationsResponse { data = new Issue[0] };
+            }
 
             return (openIssues, closedIssues);
         }
@@ -135,9 +155,15 @@ namespace Inedo.Extensions.Loupe.Client
             request.Headers.Add("Authorization", "Session " + authToken.Token);
 
             if (arguments.Product != null)
+            {
                 request.Headers.Add("loupe-product", arguments.Product);
+                this.log.LogDebug("Filtering by product: " + arguments.Product);
+            }
             if (arguments.Application != null)
+            {
                 request.Headers.Add("loupe-application", arguments.Application);
+                this.log.LogDebug("Filtering by application: " + arguments.Application);
+            }
 
             request.ContentType = "application/json";
             request.Method = method;
@@ -164,8 +190,7 @@ namespace Inedo.Extensions.Loupe.Client
             }
             catch (WebException ex) when (ex.Response != null)
             {
-#warning FIX error handling
-                throw;
+                throw LoupeRestException.Wrap(ex, url);
             }
         }
 
@@ -204,8 +229,7 @@ namespace Inedo.Extensions.Loupe.Client
             }
             catch (WebException ex) when (ex.Response != null)
             {
-#warning FIX error handling
-                throw;
+                throw LoupeRestException.Wrap(ex, url);
             }
         }
 
@@ -263,6 +287,51 @@ namespace Inedo.Extensions.Loupe.Client
                 buffer.AppendFormat("applicationVersionId={0}&", this.ApplicationVersionId);
 
             return buffer.ToString().TrimEnd('?', '&');
+        }
+    }
+
+    internal sealed class LoupeRestException : Exception
+    {
+        public LoupeRestException(int statusCode, string message, Exception inner)
+            : base(message, inner)
+        {
+            this.StatusCode = statusCode;
+        }
+
+        public int StatusCode { get; }
+
+        public string FullMessage => $"The server returned an error ({this.StatusCode}): {this.Message}";
+
+        public static LoupeRestException Wrap(WebException ex, string url)
+        {
+            var response = (HttpWebResponse)ex.Response;
+            try
+            {
+                var error = LoupeRestClient.DeserializeJson<Error>(response);
+                return new LoupeRestException((int)response.StatusCode, error.message, ex);
+            }
+            catch
+            {
+                using (var responseStream = ex.Response.GetResponseStream())
+                {
+                    try
+                    {
+                        string errorText = new StreamReader(responseStream).ReadToEnd();
+                        return new LoupeRestException((int)response.StatusCode, errorText, ex);
+                    }
+                    catch
+                    {
+                        if (response.StatusCode == HttpStatusCode.Unauthorized)
+                            return new LoupeRestException((int)response.StatusCode, "Verify that the credentials used to connect are correct.", ex);
+                        if (response.StatusCode == HttpStatusCode.Forbidden)
+                            return new LoupeRestException((int)response.StatusCode, "Verify that the credentials used to connect have permission to access related resources.", ex);
+                        if (response.StatusCode == HttpStatusCode.NotFound)
+                            return new LoupeRestException((int)response.StatusCode, $"Verify that the URL in the operation or credentials is correct (resolved to '{url}').", ex);
+
+                        throw ex;
+                    }
+                }
+            }
         }
     }
 }
