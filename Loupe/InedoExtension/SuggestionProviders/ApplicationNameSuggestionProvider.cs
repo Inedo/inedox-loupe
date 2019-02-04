@@ -21,11 +21,13 @@ namespace Inedo.Extensions.Loupe.SuggestionProviders
 
             var client = new LoupeRestClient(credentials.BaseUrl, credentials.UserName, credentials.Password, null);
 
-            var applications = await client.GetApplicationsAsync(config["Tenant"]).ConfigureAwait(false);
+            string tenant = AH.NullIf(AH.CoalesceString(config["Tenant"], credentials.Tenant), string.Empty);
+
+            var applications = await client.GetApplicationsAsync(tenant).ConfigureAwait(false);
 
             string product = AH.NullIf(config["Product"], string.Empty);
 
-            return applications.data
+            return applications
                 .Where(a => product == null || string.Equals(product, a.productName, System.StringComparison.OrdinalIgnoreCase))
                 .Select(a => a.applicationName)
                 .Distinct()

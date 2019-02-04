@@ -74,12 +74,14 @@
     <Compile Include="Client\Model\ApplicationVersionResponse.cs" />
     <Compile Include="Client\Model\AuthenticationToken.cs" />
     <Compile Include="Client\Model\Error.cs" />
+    <Compile Include="Client\Model\GetApplicationVersionResponse.cs" />
     <Compile Include="Client\Model\IssuesForApplicationsResponse.cs" />
     <Compile Include="Client\Model\ProductsAndApplicationsResponse.cs" />
     <Compile Include="Client\Model\TenantsForUserResponse.cs" />
     <Compile Include="Credentials\LoupeCredentials.cs" />
     <Compile Include="IssueSources\LoupeIssue.cs" />
     <Compile Include="IssueSources\LoupeIssueSource.cs" />
+    <Compile Include="Operations\EnsureApplicationVersionOperation.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SuggestionProviders\ApplicationNameSuggestionProvider.cs" />
     <Compile Include="SuggestionProviders\ProductNameSuggestionProvider.cs" />
@@ -88,9 +90,7 @@
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Operations\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>powershell -Command "if (Test-Path C:\Projects\Extensions\Shared -PathType Container) { Compress-Archive -Path '$(TargetDir)*' -DestinationPath C:\Projects\Extensions\Shared\$(TargetName).zip -Force; Move-Item C:\Projects\Extensions\Shared\$(TargetName).zip -Destination C:\Projects\Extensions\Shared\$(TargetName).inedox -Force }"</PostBuildEvent>

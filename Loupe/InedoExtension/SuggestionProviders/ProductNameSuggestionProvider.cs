@@ -20,10 +20,12 @@ namespace Inedo.Extensions.Loupe.SuggestionProviders
             var credentials = ResourceCredentials.Create<LoupeCredentials>(credentialName);
 
             var client = new LoupeRestClient(credentials.BaseUrl, credentials.UserName, credentials.Password, null);
-            string tenant = AH.NullIf(config["Tenant"], string.Empty);
+
+            string tenant = AH.NullIf(AH.CoalesceString(config["Tenant"], credentials.Tenant), string.Empty);
+
             var applications = await client.GetApplicationsAsync(tenant).ConfigureAwait(false);
 
-            return applications.data.Select(a => a.productName).Distinct().OrderBy(t => t);
+            return applications.Select(a => a.productName).Distinct().OrderBy(t => t);
         }
     }
 }

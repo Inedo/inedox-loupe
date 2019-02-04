@@ -28,6 +28,44 @@ namespace Inedo.Extensions.Loupe.Client
             this.log = log ?? new NullLogSink();
         }
 
+        public async Task UpdateApplicationVersionAsync(string tenant, string product, string application, string version, UpdateVersionOptions options)
+        {
+            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var versionData = await this.FindVersionAsync(tenant, version, product, application, token);
+
+            if (versionData == null)
+                throw new LoupeRestException(404, $"version '{version}' not found in Loupe.", null);
+
+            if (options.Caption != null)
+                versionData.version.caption = options.Caption;
+            if (options.Description != null)
+                versionData.version.description = options.Description;
+            if (options.DisplayVersion != null)
+                versionData.version.displayVersion = options.DisplayVersion;
+            if (options.PromotionLevelCaption != null)
+                versionData.version.promotionLevel = versionData.lists.promotionLevels.FirstOrDefault(p => string.Equals(p.caption, options.PromotionLevelCaption, StringComparison.OrdinalIgnoreCase))?.id;
+            if (options.ReleaseDate != null)
+                versionData.version.releaseDate = options.ReleaseDate.Value.ToUniversalTime().Date;
+            if (options.ReleaseNotesUrl != null)
+                versionData.version.releaseNotesUrl = options.ReleaseNotesUrl;
+            if (options.ReleaseTypeCaption != null)
+                versionData.version.releaseType = versionData.lists.releaseTypes.FirstOrDefault(p => string.Equals(p.caption, options.ReleaseTypeCaption, StringComparison.OrdinalIgnoreCase))?.id;
+
+            var result = await this.InvokeAsync<object>(
+                token,
+                "PUT",
+                $"ApplicationVersion/Put/{versionData.version.id}",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                },
+                versionData.version
+            ).ConfigureAwait(false);
+        }
+
         public async Task<TenantsForUserResponse> GetTenantsAsync()
         {
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
@@ -42,11 +80,11 @@ namespace Inedo.Extensions.Loupe.Client
             return result;
         }
 
-        public async Task<ProductsAndApplicationsResponse> GetApplicationsAsync(string tenant)
+        public async Task<Application[]> GetApplicationsAsync(string tenant)
         {
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
-            var result = await this.InvokeAsync<ProductsAndApplicationsResponse>(
+            var result = await this.InvokeAsync<Application[]>(
                 token,
                 "GET",
                 "Application/AllProductsAndApplications",
@@ -82,23 +120,8 @@ namespace Inedo.Extensions.Loupe.Client
 
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
-            var versions = await this.InvokeAsync<ApplicationVersionResponse>(
-                 token,
-                 "GET",
-                 "ApplicationVersion/Versions",
-                 new LoupeApiOptions
-                 {
-                     Tenant = tenant,
-                     IncludeQueryString = true,
-                     ReleaseTypeId = Guid.Empty.ToString(),
-                     Product = product,
-                     Application = application
-                 }
-             ).ConfigureAwait(false);
+            var versionData = await this.FindVersionAsync(tenant, version, product, application, token);
 
-            this.log.LogDebug($"Searching for version {version}...");
-
-            var versionData = versions.data.FirstOrDefault(v => string.Equals(v.version.title, version, StringComparison.OrdinalIgnoreCase));
             if (versionData == null)
                 throw new LoupeRestException(404, $"version '{version}' not found in Loupe.", null);
 
@@ -113,7 +136,7 @@ namespace Inedo.Extensions.Loupe.Client
                     {
                         Tenant = tenant,
                         IncludeQueryString = true,
-                        ApplicationVersionId = versionData.id
+                        ApplicationVersionId = versionData.version.id
                     }
                 ).ConfigureAwait(false);
             }
@@ -125,7 +148,7 @@ namespace Inedo.Extensions.Loupe.Client
 
             IssuesForApplicationsResponse closedIssues;
             try
-            { 
+            {
                 closedIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
                     token,
                     "GET",
@@ -134,7 +157,7 @@ namespace Inedo.Extensions.Loupe.Client
                     {
                         Tenant = tenant,
                         IncludeQueryString = true,
-                        ApplicationVersionId = versionData.id
+                        ApplicationVersionId = versionData.version.id
                     }
                 ).ConfigureAwait(false);
             }
@@ -145,6 +168,44 @@ namespace Inedo.Extensions.Loupe.Client
             }
 
             return (openIssues, closedIssues);
+        }
+
+        public async Task<GetApplicationVersionResponse> FindVersionAsync(string tenant, string version, string product, string application, AuthenticationToken token = null)
+        {
+            if (token == null)
+                token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var options = new LoupeApiOptions
+            {
+                Tenant = tenant,
+                IncludeQueryString = true,
+                ReleaseTypeId = Guid.Empty.ToString(),
+                Product = product,
+                Application = application
+            };
+
+            var versions = await this.InvokeAsync<ApplicationVersionResponse>(
+                             token,
+                             "GET",
+                             "ApplicationVersion/Versions",
+                             options
+                         ).ConfigureAwait(false);
+
+            this.log.LogDebug($"Searching for version {version}...");
+
+            var versionData = versions.data.FirstOrDefault(v => string.Equals(v.version.title, version, StringComparison.OrdinalIgnoreCase));
+
+            if (versionData == null)
+                return null;
+
+            var getVersionData = await this.InvokeAsync<GetApplicationVersionResponse>(
+                token,
+                "GET",
+                $"ApplicationVersion/Get/{versionData.id}",
+                options
+            );
+
+            return getVersionData;
         }
 
         private async Task<T> InvokeAsync<T>(AuthenticationToken authToken, string method, string relativeUrl, LoupeApiOptions arguments, object data = null)
@@ -350,6 +411,31 @@ namespace Inedo.Extensions.Loupe.Client
                     }
                 }
             }
+        }
+    }
+
+    internal sealed class UpdateVersionOptions
+    {
+        public string Description { get; set; }
+        public string PromotionLevelCaption { get; set; }
+        public string ReleaseNotesUrl { get; set; }
+        public string Caption { get; set; }
+        public string DisplayVersion { get; set; }
+        public DateTimeOffset? ReleaseDate { get; set; }
+        public string ReleaseTypeCaption { get; set; }
+
+        public override string ToString()
+        {
+            return string.Join(
+                Environment.NewLine,
+                "Description: " + this.Description,
+                "PromotionLevelCaption: " + this.PromotionLevelCaption,
+                "ReleaseNotesUrl: " + this.ReleaseNotesUrl,
+                "Caption: " + this.Caption,
+                "DisplayVersion: " + this.DisplayVersion,
+                "ReleaseDate: " + this.ReleaseDate,
+                "ReleaseTypeCaption: " + this.ReleaseTypeCaption
+            );            
         }
     }
 }
