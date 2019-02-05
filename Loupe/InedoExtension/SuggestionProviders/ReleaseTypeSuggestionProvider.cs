@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Inedo.Extensibility;
@@ -10,7 +9,7 @@ using Inedo.Web;
 
 namespace Inedo.Extensions.Loupe.SuggestionProviders
 {
-    internal sealed class ApplicationNameSuggestionProvider : ISuggestionProvider
+    internal sealed class ReleaseTypeSuggestionProvider : ISuggestionProvider
     {
         public async Task<IEnumerable<string>> GetSuggestionsAsync(IComponentConfiguration config)
         {
@@ -23,16 +22,15 @@ namespace Inedo.Extensions.Loupe.SuggestionProviders
             var client = new LoupeRestClient(credentials.BaseUrl, credentials.UserName, credentials.Password, null);
 
             string tenant = AH.NullIf(AH.CoalesceString(config["Tenant"], credentials.Tenant), string.Empty);
-
-            var applications = await client.GetApplicationsAsync(tenant).ConfigureAwait(false);
-
             string product = AH.NullIf(config["Product"], string.Empty);
+            string application = AH.NullIf(config["Application"], string.Empty);
 
-            return applications
-                .Where(a => product == null || string.Equals(product, a.productName, StringComparison.OrdinalIgnoreCase))
-                .Select(a => a.applicationName)
-                .Distinct()
-                .OrderBy(t => t);
+            if (tenant == null || product == null || application == null)
+                return Enumerable.Empty<string>();
+
+            var types = await client.GetReleaseTypesAsync(tenant, product, application).ConfigureAwait(false);
+
+            return types;
         }
     }
 }

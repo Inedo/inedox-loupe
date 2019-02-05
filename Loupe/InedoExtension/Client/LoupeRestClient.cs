@@ -28,8 +28,50 @@ namespace Inedo.Extensions.Loupe.Client
             this.log = log ?? new NullLogSink();
         }
 
-        public async Task UpdateApplicationVersionAsync(string tenant, string product, string application, string version, UpdateVersionOptions options)
+        public async Task CreateApplicationVersionAsync(string tenant, string product, string application, string version, VersionOptions options)
         {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            if (string.IsNullOrEmpty(options.ReleaseTypeCaption))
+                throw new LoupeRestException(400, "A release type caption is required when creating an application version.", null);
+
+            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var emptyVersionData = await this.InvokeAsync<GetApplicationVersionResponse>(
+                token,
+                "GET",
+                $"ApplicationVersion/GetNew",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                }
+            );
+
+            ApplyVersionFieldsToModel(options, emptyVersionData);
+
+            emptyVersionData.version.version = version;
+
+            var result = await this.InvokeAsync<object>(
+                token,
+                "POST",
+                $"ApplicationVersion/Post/{emptyVersionData.version.id}",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                },
+                emptyVersionData.version
+            ).ConfigureAwait(false);
+        }
+
+        public async Task UpdateApplicationVersionAsync(string tenant, string product, string application, string version, VersionOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
             var versionData = await this.FindVersionAsync(tenant, version, product, application, token);
@@ -37,6 +79,24 @@ namespace Inedo.Extensions.Loupe.Client
             if (versionData == null)
                 throw new LoupeRestException(404, $"version '{version}' not found in Loupe.", null);
 
+            ApplyVersionFieldsToModel(options, versionData);
+
+            var result = await this.InvokeAsync<object>(
+                token,
+                "PUT",
+                $"ApplicationVersion/Put/{versionData.version.id}",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                },
+                versionData.version
+            ).ConfigureAwait(false);
+        }
+
+        private static void ApplyVersionFieldsToModel(VersionOptions options, GetApplicationVersionResponse versionData)
+        {
             if (options.Caption != null)
                 versionData.version.caption = options.Caption;
             if (options.Description != null)
@@ -51,19 +111,6 @@ namespace Inedo.Extensions.Loupe.Client
                 versionData.version.releaseNotesUrl = options.ReleaseNotesUrl;
             if (options.ReleaseTypeCaption != null)
                 versionData.version.releaseType = versionData.lists.releaseTypes.FirstOrDefault(p => string.Equals(p.caption, options.ReleaseTypeCaption, StringComparison.OrdinalIgnoreCase))?.id;
-
-            var result = await this.InvokeAsync<object>(
-                token,
-                "PUT",
-                $"ApplicationVersion/Put/{versionData.version.id}",
-                new LoupeApiOptions
-                {
-                    Tenant = tenant,
-                    Product = product,
-                    Application = application
-                },
-                versionData.version
-            ).ConfigureAwait(false);
         }
 
         public async Task<TenantsForUserResponse> GetTenantsAsync()
@@ -206,6 +253,44 @@ namespace Inedo.Extensions.Loupe.Client
             );
 
             return getVersionData;
+        }
+
+        public async Task<string[]> GetReleaseTypesAsync(string tenant, string product, string application)
+        {
+            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var emptyVersionData = await this.InvokeAsync<GetApplicationVersionResponse>(
+                token,
+                "GET",
+                $"ApplicationVersion/GetNew",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                }
+            );
+
+            return emptyVersionData.lists.releaseTypes.Select(t => t.caption).OrderBy(t => t).ToArray();
+        }
+
+        public async Task<string[]> GetPromotionLevelsAsync(string tenant, string product, string application)
+        {
+            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+
+            var emptyVersionData = await this.InvokeAsync<GetApplicationVersionResponse>(
+                token,
+                "GET",
+                $"ApplicationVersion/GetNew",
+                new LoupeApiOptions
+                {
+                    Tenant = tenant,
+                    Product = product,
+                    Application = application
+                }
+            );
+
+            return emptyVersionData.lists.promotionLevels.Select(p => p.caption).OrderBy(t => t).ToArray();
         }
 
         private async Task<T> InvokeAsync<T>(AuthenticationToken authToken, string method, string relativeUrl, LoupeApiOptions arguments, object data = null)
@@ -414,7 +499,7 @@ namespace Inedo.Extensions.Loupe.Client
         }
     }
 
-    internal sealed class UpdateVersionOptions
+    internal sealed class VersionOptions
     {
         public string Description { get; set; }
         public string PromotionLevelCaption { get; set; }

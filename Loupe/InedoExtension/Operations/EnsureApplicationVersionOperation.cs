@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
+﻿using System.ComponentModel;
 using System.Security;
-using System.Text;
 using System.Threading.Tasks;
 using Inedo.Diagnostics;
 using Inedo.Documentation;
@@ -66,6 +62,7 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
 
         [ScriptAlias("PromotionLevel")]
         [DisplayName("Promotion level")]
+        [SuggestableValue(typeof(PromotionLevelSuggestionProvider))]
         public string PromotionLevel { get; set; }
 
         [ScriptAlias("ReleaseNotesUrl")]
@@ -78,6 +75,7 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
 
         [ScriptAlias("ReleaseType")]
         [DisplayName("Release type")]
+        [SuggestableValue(typeof(ReleaseTypeSuggestionProvider))]
         public string ReleaseType { get; set; }
 
         #region Duplicate credentials fields...
@@ -120,7 +118,7 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
             var client = new LoupeRestClient(this.BaseUrl, this.UserName, this.Password, this);
             var version = await client.FindVersionAsync(this.Tenant, this.Version, this.Product, this.Application).ConfigureAwait(false);
 
-            var options = new UpdateVersionOptions
+            var options = new VersionOptions
             {
                 Description = this.Description,
                 Caption = this.Caption,
@@ -133,20 +131,27 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
 
             this.LogDebug("Options: " + options);
 
-            if (version == null)
+            try
             {
-                this.LogInformation("Version does not exist, creating...");
+                if (version == null)
+                {
+                    this.LogInformation("Version does not exist, creating...");
 
-                throw new NotImplementedException("Create version not implemented");
+                    await client.CreateApplicationVersionAsync(this.Tenant, this.Product, this.Application, this.Version, options).ConfigureAwait(false);
 
-                //this.LogInformation("Version created.");
+                    this.LogInformation("Version created.");
+                }
+                else
+                {
+                    this.LogInformation("Version already exists, updating...");
+
+                    await client.UpdateApplicationVersionAsync(this.Tenant, this.Product, this.Application, this.Version, options).ConfigureAwait(false);
+                    this.LogInformation("Version updated.");
+                }
             }
-            else
+            catch (LoupeRestException ex)
             {
-                this.LogInformation("Version already exists, updating...");
-
-                await client.UpdateApplicationVersionAsync(this.Tenant, this.Product, this.Application, this.Version, options).ConfigureAwait(false);
-                this.LogInformation("Version updated.");
+                this.LogError(ex.FullMessage);
             }
         }
 
