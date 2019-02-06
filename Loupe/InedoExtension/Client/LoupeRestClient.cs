@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Security;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Inedo.Diagnostics;
 using Inedo.Extensions.Loupe.Client.Model;
@@ -141,7 +143,7 @@ namespace Inedo.Extensions.Loupe.Client
             return result;
         }
 
-        public async Task<ApplicationVersionResponse> GetVersionsAsync(string tenant)
+        public async Task<ApplicationVersionResponse> GetVersionsAsync(string tenant, string product = null, string application = null)
         {
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
@@ -152,6 +154,8 @@ namespace Inedo.Extensions.Loupe.Client
                 new LoupeApiOptions
                 {
                     Tenant = tenant,
+                    Product = product,
+                    Application = application,
                     IncludeQueryString = true,
                     ReleaseTypeId = Guid.Empty.ToString()
                 }
@@ -160,22 +164,66 @@ namespace Inedo.Extensions.Loupe.Client
             return result;
         }
 
-        public async Task<(IssuesForApplicationsResponse open, IssuesForApplicationsResponse closed)> GetIssuesAsync(string tenant, string version, string product = null, string application = null)
+        public async Task<Issue[]> GetIssuesAsync(string tenant, string versionSpecifier, string product = null, string application = null)
         {
-            if (string.IsNullOrEmpty(version))
-                throw new ArgumentNullException(nameof(version));
+            if (string.IsNullOrEmpty(versionSpecifier))
+                throw new ArgumentNullException(nameof(versionSpecifier));
 
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
-            var versionData = await this.FindVersionAsync(tenant, version, product, application, token);
+            var matchingVersions = new List<(string caption, Guid id)>();
+            if (versionSpecifier.Contains("*"))
+            {
+                this.log.LogInformation($"Matching wildcard version '{versionSpecifier}'...");
 
-            if (versionData == null)
-                throw new LoupeRestException(404, $"version '{version}' not found in Loupe.", null);
+                var regex = new Regex(Regex.Escape(versionSpecifier).Replace(@"\*", "*"), RegexOptions.CultureInvariant);
 
-            IssuesForApplicationsResponse openIssues;
+                var versions = await this.GetVersionsAsync(tenant, product, application).ConfigureAwait(false);
+
+                this.log.LogDebug($"Found {versions.data.Length} possible versions...");
+
+                foreach (var v in versions.data)
+                {
+                    if (regex.IsMatch(v.caption))
+                    {
+                        matchingVersions.Add((v.caption, v.id));
+                    }
+                }
+            }
+            else
+            {
+                this.log.LogInformation($"Matching specific version '{versionSpecifier}'...");
+
+                var match = await this.FindVersionAsync(tenant, versionSpecifier, product, application, token).ConfigureAwait(false);
+
+                if (match != null)
+                    matchingVersions.Add((match.version.caption, match.version.id));
+                else
+                    this.log.LogDebug("Version not found.");
+            }
+
+            this.log.LogDebug($"Found {matchingVersions.Count} matching version(s).");
+
+            var issues = new List<Issue>();
+
+            foreach (var matchingVersion in matchingVersions)
+            {
+                var versionIssues = await GetIssuesForSingleVersionAsync(tenant, matchingVersion.id, product, application, token).ConfigureAwait(false);
+                
+                this.log.LogDebug($"Version '{matchingVersion.caption}' has {versionIssues.Length} issues.");
+
+                issues.AddRange(versionIssues);
+            }
+
+            return issues.ToArray();
+        }
+
+        private async Task<Issue[]> GetIssuesForSingleVersionAsync(string tenant, Guid versionId, string product, string application, AuthenticationToken token)
+        {
             try
             {
-                openIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
+                // this endpoint also returns closed issues
+                var issues = await this.InvokeAsync<IssuesForApplicationsResponse>(
                     token,
                     "GET",
                     "Issues/OpenForApplication",
@@ -183,38 +231,22 @@ namespace Inedo.Extensions.Loupe.Client
                     {
                         Tenant = tenant,
                         IncludeQueryString = true,
-                        ApplicationVersionId = versionData.version.id
+                        ApplicationVersionId = versionId.ToString("n")
                     }
                 ).ConfigureAwait(false);
+
+                return issues.data;
             }
             catch (LoupeRestException ex) when (ex.StatusCode == 404)
             {
-                // a 404 on this endpoint means there are no issues, simulate that response
-                openIssues = new IssuesForApplicationsResponse { data = new Issue[0] };
+                // a 404 on this endpoint means that no issues were found, emulate that response
+                return new Issue[0];
             }
-
-            IssuesForApplicationsResponse closedIssues;
-            try
+            catch (LoupeRestException ex)
             {
-                closedIssues = await this.InvokeAsync<IssuesForApplicationsResponse>(
-                    token,
-                    "GET",
-                    "Issues/ClosedForApplication",
-                    new LoupeApiOptions
-                    {
-                        Tenant = tenant,
-                        IncludeQueryString = true,
-                        ApplicationVersionId = versionData.version.id
-                    }
-                ).ConfigureAwait(false);
+                this.log.LogDebug($"Could not retrieve issues for version ID='{versionId}': " + ex.FullMessage);
+                return new Issue[0];
             }
-            catch (LoupeRestException ex) when (ex.StatusCode == 404)
-            {
-                // a 404 on this endpoint means there are no issues, simulate that response
-                closedIssues = new IssuesForApplicationsResponse { data = new Issue[0] };
-            }
-
-            return (openIssues, closedIssues);
         }
 
         public async Task<GetApplicationVersionResponse> FindVersionAsync(string tenant, string version, string product, string application, AuthenticationToken token = null)

@@ -10,11 +10,11 @@ namespace Inedo.Extensions.Loupe.IssueSources
         private readonly string baseUrl;
         private readonly Issue issue;
 
-        public LoupeIssue(string baseUrl, Issue issue, bool closed)
+        public LoupeIssue(string baseUrl, Issue issue)
         {
             this.baseUrl = (AH.CoalesceString(baseUrl, LoupeRestClient.DefaultBaseUrl)).TrimEnd('/');
             this.issue = issue ?? throw new ArgumentNullException(nameof(issue));
-            this.IsClosed = closed || string.Equals(issue.status, "resolved", StringComparison.OrdinalIgnoreCase);
+            this.IsClosed = string.Equals(issue.status, "resolved", StringComparison.OrdinalIgnoreCase);
         }
 
         public bool IsClosed { get; }

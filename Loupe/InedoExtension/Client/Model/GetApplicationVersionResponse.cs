@@ -20,7 +20,7 @@ namespace Inedo.Extensions.Loupe.Client.Model
         public string description { get; set; }
         public Guid? promotionLevel { get; set; }
         public object releaseNotesUrl { get; set; }
-        public string id { get; set; }
+        public Guid id { get; set; }
         public string applicationId { get; set; }
         public string version { get; set; }
         public long versionBin { get; set; }

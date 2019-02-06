@@ -43,6 +43,7 @@ namespace Inedo.Extensions.Loupe.IssueSources
         [Persistent]
         [DisplayName("Application version")]
         [PlaceholderText("$ReleaseNumber")]
+        [Description("The application version may contain wildcards. If so, all issues associated with matching application versions in Loupe will be returned.")]
         public string Version { get; set; } = "$ReleaseNumber";
 
         public override async Task<IEnumerable<IIssueTrackerIssue>> EnumerateIssuesAsync(IIssueSourceEnumerationContext context)
@@ -60,12 +61,10 @@ namespace Inedo.Extensions.Loupe.IssueSources
                 this.Application
             ).ConfigureAwait(false);
 
-            var open = from i in issues.open.data
-                       select new LoupeIssue(credentials.BaseUrl, i, false);
-            var closed = from i in issues.closed.data
-                         select new LoupeIssue(credentials.BaseUrl, i, true);
+            var result = from i in issues
+                         select new LoupeIssue(credentials.BaseUrl, i);
 
-            return open.Concat(closed);
+            return result;
         }
 
         public override RichDescription GetDescription()

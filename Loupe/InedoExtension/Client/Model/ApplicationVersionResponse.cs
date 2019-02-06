@@ -21,7 +21,7 @@ namespace Inedo.Extensions.Loupe.Client.Model
 
     public class ApplicationVersion
     {
-        public string id { get; set; }
+        public Guid id { get; set; }
         public VersionData version { get; set; }
         public string caption { get; set; }
         public DateTime? releaseDate { get; set; }
