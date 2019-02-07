@@ -62,6 +62,7 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
 
         [ScriptAlias("PromotionLevel")]
         [DisplayName("Promotion level")]
+        [DefaultValue("$PipelineStageName")]
         [SuggestableValue(typeof(PromotionLevelSuggestionProvider))]
         public string PromotionLevel { get; set; }
 
@@ -93,6 +94,7 @@ foreach $LoupeApp in @(BuildMaster Service, BuildMaster WebApp)
         [Description("Hosted Loupe should always supply a tenant, also known as a customer name. If you are self-hosting Loupe, then you may still be be multi-tenant, "
             + "although most likely your installation will be single tenant, in which case you can omit the tenant.")]
         [MappedCredential(nameof(LoupeCredentials.Tenant))]
+        [SuggestableValue(typeof(TenantNameSuggestionProvider))]
         public string Tenant { get; set; }
 
         [Category("Connection")]

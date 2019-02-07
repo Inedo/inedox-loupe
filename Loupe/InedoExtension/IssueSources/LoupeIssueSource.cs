@@ -24,7 +24,7 @@ namespace Inedo.Extensions.Loupe.IssueSources
 
         [Persistent]
         [DisplayName("Tenant")]
-        [PlaceholderText("Use tentant from credentials")]
+        [PlaceholderText("Use tenant from credentials")]
         [SuggestableValue(typeof(TenantNameSuggestionProvider))]
         public string Tenant { get; set; }
 

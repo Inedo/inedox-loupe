@@ -143,9 +143,10 @@ namespace Inedo.Extensions.Loupe.Client
             return result;
         }
 
-        public async Task<ApplicationVersionResponse> GetVersionsAsync(string tenant, string product = null, string application = null)
+        public async Task<ApplicationVersionResponse> GetVersionsAsync(string tenant, string product = null, string application = null, AuthenticationToken token = null)
         {
-            var token = await this.AuthenticateAsync().ConfigureAwait(false);
+            if (token == null)
+                token = await this.AuthenticateAsync().ConfigureAwait(false);
 
             var result = await this.InvokeAsync<ApplicationVersionResponse>(
                 token,
@@ -171,14 +172,14 @@ namespace Inedo.Extensions.Loupe.Client
 
             var token = await this.AuthenticateAsync().ConfigureAwait(false);
 
-            var matchingVersions = new List<(string caption, Guid id)>();
+            var matchingVersions = new List<(string title, Guid id)>();
             if (versionSpecifier.Contains("*"))
             {
                 this.log.LogInformation($"Matching wildcard version '{versionSpecifier}'...");
 
                 var regex = new Regex(Regex.Escape(versionSpecifier).Replace(@"\*", "*"), RegexOptions.CultureInvariant);
 
-                var versions = await this.GetVersionsAsync(tenant, product, application).ConfigureAwait(false);
+                var versions = await this.GetVersionsAsync(tenant, product, application, token).ConfigureAwait(false);
 
                 this.log.LogDebug($"Found {versions.data.Length} possible versions...");
 
@@ -186,7 +187,7 @@ namespace Inedo.Extensions.Loupe.Client
                 {
                     if (regex.IsMatch(v.caption))
                     {
-                        matchingVersions.Add((v.caption, v.id));
+                        matchingVersions.Add((v.version.title, v.id));
                     }
                 }
             }
@@ -210,7 +211,7 @@ namespace Inedo.Extensions.Loupe.Client
             {
                 var versionIssues = await GetIssuesForSingleVersionAsync(tenant, matchingVersion.id, product, application, token).ConfigureAwait(false);
                 
-                this.log.LogDebug($"Version '{matchingVersion.caption}' has {versionIssues.Length} issues.");
+                this.log.LogDebug($"Version '{matchingVersion.title}' has {versionIssues.Length} issues.");
 
                 issues.AddRange(versionIssues);
             }
